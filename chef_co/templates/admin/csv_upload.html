@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div>
+    <h1>Upload Quantity References CSV</h1>
+    <p>Upload a CSV file containing quantity references for menu items. The CSV should follow this format:</p>
+    
+    <div style="padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; margin: 10px 0; border-radius: 4px;">
+        <pre>MENU,50PAX,100PAX,250PAX,500PAX<br/>
+APPETIZERS<br/>
+PANEER,2KG,4KG,6KG,8KG<br/>
+VEG,2KG,4KG,6KG,8KG<br/>
+...</pre>
+    </div>
+    
+    <p>Requirements:</p>
+    <ul>
+        <li>The first row should contain column headers with party sizes (e.g., "50PAX")</li>
+        <li>Course names (e.g., "APPETIZERS", "MAIN COURSE") should be in their own rows</li>
+        <li>Each menu item should be in its own row with quantities for each party size</li>
+        <li>Quantity format should be a number followed by a unit (e.g., "2KG", "200PC")</li>
+    </ul>
+    
+    <form action="" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div style="margin-bottom: 20px;">
+            {{ form.as_p }}
+        </div>
+        <div>
+            <input type="submit" value="Upload CSV" class="default" style="padding: 10px 20px; background-color: #417690; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <a href="../" class="button" style="padding: 10px 20px; background-color: #bbb; color: white; text-decoration: none; border-radius: 4px; margin-left: 10px;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %} 
