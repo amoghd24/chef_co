@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',  # Django REST framework
     'rest_framework.authtoken',  # Token authentication
+    'drf_yasg',       # Swagger/OpenAPI
     'chef_co',         # Our app
 ]
 

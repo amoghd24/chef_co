@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder
+from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder, PredictionResult
 from django import forms
 from django.shortcuts import render, redirect
 from django.urls import path
@@ -189,3 +189,30 @@ class PartyOrderAdmin(admin.ModelAdmin):
     list_display = ('menu', 'user', 'party_size', 'created_at')
     list_filter = ('menu', 'user', 'created_at')
     search_fields = ('menu__name', 'user__username')
+
+
+@admin.register(PredictionResult)
+class PredictionResultAdmin(admin.ModelAdmin):
+    list_display = ('name', 'party_order', 'created_at')
+    list_filter = ('party_order__menu', 'party_order__user', 'created_at')
+    search_fields = ('name', 'party_order__menu__name')
+    readonly_fields = ('result_data', 'party_order', 'created_at')
+    actions = ['update_prediction_names']
+    
+    def update_prediction_names(self, request, queryset):
+        """
+        Update prediction names to use their party order string representations.
+        """
+        updated = 0
+        for prediction in queryset:
+            if prediction.name == 'string':
+                prediction.name = str(prediction.party_order)
+                prediction.save()
+                updated += 1
+        
+        if updated == 0:
+            self.message_user(request, "No predictions required name updates.", level='INFO')
+        else:
+            self.message_user(request, f"Successfully updated names for {updated} predictions.", level='SUCCESS')
+    
+    update_prediction_names.short_description = "Update selected predictions with party order names"

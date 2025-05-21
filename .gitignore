@@ -5,6 +5,7 @@
 __pycache__/
 local_settings.py
 db.sqlite3
+db.sqlite3-journal
 media
 
 # Environments
@@ -16,15 +17,29 @@ ENV/
 env.bak/
 venv.bak/
 
-# Visual Studio Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# Python cache
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
 
-# PyCharm
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# IDE
 .idea/
-
-# macOS
-.DS_Store 
+.vscode/
+*.swp
+*.swo 

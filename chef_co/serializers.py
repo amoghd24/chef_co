@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder
+from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder, PredictionResult
 from django.contrib.auth.models import User
 
 
@@ -55,4 +55,20 @@ class PartyOrderSerializer(serializers.ModelSerializer):
         
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
-        return super().create(validated_data) 
+        return super().create(validated_data)
+
+
+class PredictionResultSerializer(serializers.ModelSerializer):
+    party_order = PartyOrderSerializer(read_only=True)
+    
+    class Meta:
+        model = PredictionResult
+        fields = ['id', 'party_order', 'result_data', 'created_at', 'name']
+        read_only_fields = ['result_data', 'created_at']
+        
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        # Include the prediction data directly in the response for convenience
+        if isinstance(instance.result_data, dict):
+            representation['predictions'] = instance.result_data.get('predictions', [])
+        return representation 

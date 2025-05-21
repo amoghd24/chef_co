@@ -1,17 +1,21 @@
 from django.shortcuts import render
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+import json
 from django.conf import settings
 import openai
 import os
 from decimal import Decimal
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
-from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder
+from .models import Menu, Course, MenuItem, QuantityReference, PartyOrder, PredictionResult
 from .serializers import (
     MenuSerializer, CourseSerializer, MenuItemSerializer,
-    QuantityReferenceSerializer, PartyOrderSerializer
+    QuantityReferenceSerializer, PartyOrderSerializer, PredictionResultSerializer
 )
+from .apiutils import tags, prediction_name_schema
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -27,37 +31,94 @@ class IsAdminOrReadOnly(permissions.BasePermission):
 
 
 class MenuViewSet(viewsets.ModelViewSet):
+    """
+    API endpoints for managing menus.
+    """
     queryset = Menu.objects.all()
     serializer_class = MenuSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
     
+    @swagger_auto_schema(
+        operation_summary="Create a new menu",
+        operation_description="Creates a new menu with the current user as creator.",
+        tags=[tags['menus']]
+    )
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
 class CourseViewSet(viewsets.ModelViewSet):
+    """
+    API endpoints for managing courses within menus.
+    """
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
+    
+    @swagger_auto_schema(
+        operation_summary="List all courses",
+        operation_description="List all courses across all menus.",
+        tags=[tags['courses']]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Create a new course",
+        operation_description="Create a new course within a menu.",
+        tags=[tags['courses']]
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
 
 
 class MenuItemViewSet(viewsets.ModelViewSet):
+    """
+    API endpoints for managing menu items within courses.
+    """
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
+    
+    @swagger_auto_schema(
+        operation_summary="List all menu items",
+        operation_description="List all menu items across all courses.",
+        tags=[tags['menu_items']]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
 
 class QuantityReferenceViewSet(viewsets.ModelViewSet):
+    """
+    API endpoints for managing quantity references for menu items.
+    """
     queryset = QuantityReference.objects.all()
     serializer_class = QuantityReferenceSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
+    
+    @swagger_auto_schema(
+        operation_summary="List all quantity references",
+        operation_description="List all quantity references for menu items.",
+        tags=[tags['quantity_references']]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
 
 class PartyOrderViewSet(viewsets.ModelViewSet):
+    """
+    API endpoints for managing party orders.
+    """
     queryset = PartyOrder.objects.all()
     serializer_class = PartyOrderSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_summary="List party orders",
+        operation_description="List all party orders for the current user (or all users for admins).",
+        tags=[tags['party_orders']]
+    )
     def get_queryset(self):
         # Regular users can only see their own orders
         if not self.request.user.is_staff:
@@ -65,14 +126,25 @@ class PartyOrderViewSet(viewsets.ModelViewSet):
         # Admins can see all orders
         return PartyOrder.objects.all()
     
-    @action(detail=True, methods=['get'])
+    @swagger_auto_schema(
+        operation_summary="Generate quantity predictions",
+        operation_description="Use AI to predict quantities for a party order based on reference data and save the result.",
+        request_body=prediction_name_schema,
+        tags=[tags['predictions']]
+    )
+    @action(detail=True, methods=['post'])
     def predict_quantities(self, request, pk=None):
         """
-        Use OpenAI to predict quantities for the menu items based on party size
+        Use OpenAI to predict quantities for the menu items based on party size and save the result
         """
         party_order = self.get_object()
         menu_id = party_order.menu.id
         party_size = party_order.party_size
+        
+        # Get custom name or use party order as default
+        prediction_name = request.data.get('name', '').strip()
+        if not prediction_name:
+            prediction_name = str(party_order)  # Use the party order's string representation
         
         # Get all reference quantities from the database
         menu = Menu.objects.prefetch_related(
@@ -165,12 +237,68 @@ class PartyOrderViewSet(viewsets.ModelViewSet):
                 max_tokens=2000
             )
             
-            # Return the response
+            # Get the response content
             content = response.choices[0].message.content
-            return Response(content, status=status.HTTP_200_OK)
+            
+            # Parse JSON to ensure it's valid
+            result_data = json.loads(content)
+            
+            # Always save the prediction
+            prediction = PredictionResult.objects.create(
+                party_order=party_order,
+                result_data=result_data,
+                name=prediction_name
+            )
+            
+            # Return both the prediction and its metadata
+            return Response({
+                "prediction_id": prediction.id,
+                "name": prediction.name,
+                "created_at": prediction.created_at,
+                "data": result_data
+            }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
             return Response(
                 {"error": f"Failed to predict quantities: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class PredictedQuantitiesViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoints for retrieving past predictions.
+    """
+    serializer_class = PredictionResultSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'party_order__menu__name']
+    ordering_fields = ['created_at', 'name']
+    
+    @swagger_auto_schema(
+        operation_summary="List all past predictions",
+        operation_description="List all saved predictions for the current user (or all users for admins).",
+        tags=[tags['predictions']]
+    )
+    def get_queryset(self):
+        # Regular users can only see their own predictions
+        if not self.request.user.is_staff:
+            return PredictionResult.objects.filter(party_order__user=self.request.user)
+        # Admins can see all predictions
+        return PredictionResult.objects.all()
+    
+    @swagger_auto_schema(
+        operation_summary="List all past predictions",
+        operation_description="Get a list of all past quantity predictions.",
+        tags=[tags['predictions']]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Get a specific prediction",
+        operation_description="Retrieve details for a specific past prediction.",
+        tags=[tags['predictions']]
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)

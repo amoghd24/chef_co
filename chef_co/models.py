@@ -69,3 +69,29 @@ class PartyOrder(models.Model):
     
     def __str__(self):
         return f"{self.menu.name} for {self.party_size} people"
+
+
+class PredictionResult(models.Model):
+    """
+    Stores saved predictions for future reference
+    """
+    party_order = models.ForeignKey(PartyOrder, related_name='predictions', on_delete=models.CASCADE)
+    result_data = models.JSONField()  # Stores the complete prediction JSON
+    created_at = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=255, blank=True)  # Optional name for the prediction
+    
+    def save(self, *args, **kwargs):
+        # Replace empty or "string" names with party order string representation
+        if not self.name or self.name == "string":
+            self.name = str(self.party_order)
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        if self.name:
+            return self.name
+        return f"Prediction for {self.party_order} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Past order prediction"
+        verbose_name_plural = "Past order predictions"
