@@ -48,14 +48,16 @@ class PartyOrderSerializer(serializers.ModelSerializer):
         source='menu'
     )
     user = UserSerializer(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        write_only=True,
+        source='user',
+        required=True
+    )
     
     class Meta:
         model = PartyOrder
-        fields = ['id', 'user', 'menu', 'menu_id', 'party_size', 'created_at']
-        
-    def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
+        fields = ['id', 'user', 'user_id', 'menu', 'menu_id', 'party_size', 'created_at']
 
 
 class PredictionResultSerializer(serializers.ModelSerializer):

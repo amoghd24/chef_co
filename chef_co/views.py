@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import viewsets, permissions, status, filters
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 import json
@@ -18,25 +18,12 @@ from .serializers import (
 from .apiutils import tags, prediction_name_schema
 
 
-class IsAdminOrReadOnly(permissions.BasePermission):
-    """
-    Custom permission to only allow admins to create/edit objects.
-    """
-    def has_permission(self, request, view):
-        # Read permissions are allowed to any request
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        # Write permissions are only allowed to admin users
-        return request.user and request.user.is_staff
-
-
 class MenuViewSet(viewsets.ModelViewSet):
     """
     API endpoints for managing menus.
     """
     queryset = Menu.objects.all()
     serializer_class = MenuSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
     
     @swagger_auto_schema(
         operation_summary="Create a new menu",
@@ -44,7 +31,10 @@ class MenuViewSet(viewsets.ModelViewSet):
         tags=[tags['menus']]
     )
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        if self.request.user.is_authenticated:
+            serializer.save(created_by=self.request.user)
+        else:
+            serializer.save()
 
 
 class CourseViewSet(viewsets.ModelViewSet):
@@ -53,7 +43,6 @@ class CourseViewSet(viewsets.ModelViewSet):
     """
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
     
     @swagger_auto_schema(
         operation_summary="List all courses",
@@ -78,7 +67,6 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     """
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
     
     @swagger_auto_schema(
         operation_summary="List all menu items",
@@ -95,7 +83,6 @@ class QuantityReferenceViewSet(viewsets.ModelViewSet):
     """
     queryset = QuantityReference.objects.all()
     serializer_class = QuantityReferenceSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
     
     @swagger_auto_schema(
         operation_summary="List all quantity references",
@@ -112,18 +99,13 @@ class PartyOrderViewSet(viewsets.ModelViewSet):
     """
     queryset = PartyOrder.objects.all()
     serializer_class = PartyOrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
     @swagger_auto_schema(
         operation_summary="List party orders",
-        operation_description="List all party orders for the current user (or all users for admins).",
+        operation_description="List all party orders.",
         tags=[tags['party_orders']]
     )
     def get_queryset(self):
-        # Regular users can only see their own orders
-        if not self.request.user.is_staff:
-            return PartyOrder.objects.filter(user=self.request.user)
-        # Admins can see all orders
         return PartyOrder.objects.all()
     
     @swagger_auto_schema(
@@ -270,21 +252,16 @@ class PredictedQuantitiesViewSet(viewsets.ReadOnlyModelViewSet):
     API endpoints for retrieving past predictions.
     """
     serializer_class = PredictionResultSerializer
-    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'party_order__menu__name']
     ordering_fields = ['created_at', 'name']
     
     @swagger_auto_schema(
         operation_summary="List all past predictions",
-        operation_description="List all saved predictions for the current user (or all users for admins).",
+        operation_description="List all saved predictions.",
         tags=[tags['predictions']]
     )
     def get_queryset(self):
-        # Regular users can only see their own predictions
-        if not self.request.user.is_staff:
-            return PredictionResult.objects.filter(party_order__user=self.request.user)
-        # Admins can see all predictions
         return PredictionResult.objects.all()
     
     @swagger_auto_schema(
